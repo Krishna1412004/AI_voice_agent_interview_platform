@@ -18,7 +18,7 @@ interface SavedMessage{
   role:'user' | 'system' | 'assistant';
   content: string;
 }
-const Agent = ({userName,userId,type }: AgentProps) => {
+const Agent = ({userName,userId,type,interviewId,questions }: AgentProps) => {
     const router = useRouter();
     const [isSpeaking,setisSpeaking] = useState(false);
     const [callStatus, setCallStatus] = useState<CallStatus>(CallStatus.INACTIVE);
@@ -57,20 +57,56 @@ const Agent = ({userName,userId,type }: AgentProps) => {
           }
     }, [])
 
+        const handleGenerateFeedback = async(messages:SavedMessage[]) => {
+          console.log('Generate feedback here.');
+
+          const { success,id } = {
+              success:true,
+              id: 'feedback-id'
+          }
+
+          if(success & id){
+            router.push('/interview/${interviewId}/feedback');
+          } else{
+            console.log('Error saving feedback');
+            router.push('/')
+          }
+        }
+
      useEffect(() => {
+          if(callStatus === CallStatus.FINISHED){
+            if(type === 'generate'){
+              router.push('/')
+            } else{
+              handleGenerateFeedback(messages);
+            }
+          }
           if(callStatus === CallStatus.FINISHED) router.push('/')
     },[messages,callStatus,type,userId]);
 
  
-  const handleCall = async () => {
+    const handleCall = async () => {
     setCallStatus(CallStatus.CONNECTING);
     try {
-      // THE DIAGNOSTIC TEST:
-      // We are now calling vapi.start() in the simplest way possible,
-      // exactly as shown in the current documentation.
-      // We are passing ONLY the assistant ID as a string.
-      await vapi.start(process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID!);
-      
+      if (type === 'generate') {
+        // Simple call for the generator assistant. We know this works.
+        await vapi.start(process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID!);
+      } else {
+        // Call for the interviewer assistant.
+        let formattedQuestions = '';
+        if (questions) {
+          formattedQuestions = questions.map((question) => `- ${question}`).join('\n');
+        }
+
+        await vapi.start(
+          process.env.NEXT_PUBLIC_VAPI_INTERVIEWER_ASSISTANT_ID!,
+          {
+            variableValues: {
+              questions: formattedQuestions
+            }
+          }
+        );
+      }
     } catch (err) {
       console.error('Failed to start Vapi call:', err);
       setCallStatus(CallStatus.INACTIVE);
